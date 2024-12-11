@@ -1,0 +1,25 @@
+cabal-version:      3.0
+name:               tetris2
+version:            0.1.0.0
+-- synopsis:
+-- description:
+license:            NONE
+author:             Bernard Poh
+maintainer:         bernard.poh.24@ucl.ac.uk
+-- copyright:
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+-- extra-source-files:
+
+common warnings
+    ghc-options: -Wall
+
+executable tetris2
+    import:           warnings
+    main-is:          Main.hs
+    other-modules:    Config, Piece
+    -- other-extensions:
+    build-depends:    base ^>=4.17.2.1, ansi-terminal, ansi-terminal-game, random, text, QuickCheck
+    hs-source-dirs:   app
+    default-language: Haskell2010
+    ghc-options: -threaded
