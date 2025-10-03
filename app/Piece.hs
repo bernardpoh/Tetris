@@ -2,21 +2,19 @@
 module Piece where
 
 import Config (height, width)
+import Data.Maybe
 
-newtype Block = Block (Maybe Shape)
+type Block = Maybe Shape
 
-instance Show Block where
-  show (Block Nothing) = "."
-  show (Block (Just s)) = [shapeChar s]
+emptyRow::[Block]
+emptyRow = replicate width Nothing
 
 emptyGrid::[[Block]]
-emptyGrid = replicate height (replicate width (Block Nothing))
+emptyGrid = replicate height $ replicate width Nothing
 
-showBoard::[[Block]] -> String
-showBoard board = unlines . reverse $ [concat [show b | b <- rows] | rows <- board]
-
-shapeChar::Shape->Char
-shapeChar s = case s of
+showBlock::Block->Char
+showBlock Nothing = '.'
+showBlock (Just s) = case s of
   S -> '#'
   Z -> '0'
   L -> '*'
@@ -24,6 +22,9 @@ shapeChar s = case s of
   T -> 'O'
   I -> 'o'
   O -> '+'
+
+showBoard::[[Block]] -> String
+showBoard = unlines . reverse . (map . map) showBlock
 
 type Point = (Int, Int)
 data Shape = S | Z | L | J | T | I | O deriving (Show, Enum, Eq, Bounded)
@@ -64,15 +65,12 @@ asPoints piece = ps
 
 checkPiece::Piece->[[Block]]->Bool
 checkPiece piece grid
-  -- and [let Block b = (grid !! y) !! x in isNothing b && y >= 0 | (x,y) <- asPoints piece, y < height, x < width]
   = not (any checkPoint points)
   where
     points = asPoints piece
     checkPoint (x, y) =
         x < 0 || x >= width || y < 0 || y >= height || isOccupied (x, y)
-    isOccupied (x, y) = case grid !! y !! x of
-        Block (Just _)  -> True      -- Overlaps if there's a Just value
-        Block Nothing -> False
+    isOccupied (x, y) = isJust $ grid !! y !! x
 
 putPiece::Piece->[[Block]]->[[Block]]
 putPiece piece board =
@@ -80,7 +78,7 @@ putPiece piece board =
   where
     ps = asPoints piece
     Piece shape _ _ = piece
-    block = Block (Just shape)
+    block = Just shape
 
 putBlocks::[Point]->Block->[[Block]]->[[Block]]
 putBlocks ps newBlock grid =

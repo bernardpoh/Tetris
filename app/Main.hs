@@ -3,8 +3,8 @@
 
 import Terminal.Game
 import System.Random (newStdGen, randomR)
+import Piece (Piece(..), Shape(..), Rotation(..), Block, Point, left, right, checkPiece, putPiece, emptyGrid, emptyRow, showBoard)
 import Config
-import Piece (Piece(..), Shape(..), Rotation(..), Block(..), Point, left, right, checkPiece, putPiece, emptyGrid, showBoard)
 
 main :: IO ()
 main = do
@@ -19,15 +19,17 @@ myGame seed = Game
   , gDrawFunction = gameDraw   -- Drawing function for game
   }
 
-gameLogic :: GEnv -> GameState -> Event -> Either () GameState
-gameLogic _ _ (KeyPress 'q') = Left ()
-gameLogic _ g (KeyPress k) = keyPressedEvent k g
-gameLogic _ g (Tick) = tickEvent g 
-
 gameDraw :: GEnv -> GameState -> Plane
 gameDraw _ g = stringPlane $ text
   where
     text = showGame g
+
+gameLogic :: GEnv -> GameState -> Event -> Either () GameState
+gameLogic _ g (KeyPress k) = keyPressedEvent k g
+gameLogic _ g (Tick) = tickEvent g 
+
+tickEvent::GameState-> Either () GameState
+tickEvent g = Right $ onTickEvent g
 
 keyPressedEvent::Char-> GameState-> Either () GameState
 keyPressedEvent 'z' g = Right $ turnRight g
@@ -45,18 +47,19 @@ keyPressedEvent 'C' g = Right $ moveRight g -- right arrow
 keyPressedEvent 'A' g = Right $ turnRight g -- up arrow
 keyPressedEvent 'B' g = Right $ moveDown g -- down arrow
 keyPressedEvent ' ' g = Right $ hardDrop g
-
 keyPressedEvent _ g = Right g
 
-data PieceState = Falling Piece Int | Locking Piece Int | Waiting Int  deriving Show
+data PieceState = Falling Piece Int | Locking Piece Int | Waiting Int | ClearingLines Int deriving Show
 
 data GameState = GameState {
     grid :: [[Block]]
     ,pieceState :: PieceState
     ,shapes :: [Shape]
+    ,fallAmount :: Int
     ,fallDelay :: Int
     ,lockDelay :: Int
     ,waitDelay :: Int
+    ,lineClearDelay :: Int
   }
 
 initialState :: StdGen -> GameState
@@ -64,9 +67,11 @@ initialState seed = GameState {
   grid = emptyGrid
   ,pieceState = Falling piece 0
   ,shapes = getPieces seed
+  ,fallAmount = 1
   ,fallDelay = 60
-  ,lockDelay = 30
+  ,lockDelay = 60
   ,waitDelay = 30
+  ,lineClearDelay = 41
   }
   where
     piece = Piece I North (5,22)
@@ -87,38 +92,29 @@ showGame GameState {..} =
       Waiting  _ -> grid
       Falling piece _ -> putPiece piece grid
       Locking piece _ -> putPiece piece grid
+      ClearingLines n -> animateClearingLines n
+    
+    animateClearingLines::Int->[[Block]]
+    animateClearingLines _ = [if isRowCleared row then emptyRow else row | row <- grid]
 
 move::(Piece->Piece)->GameState->GameState
-move f g@(GameState {..}) = checkFalling moveResult
+move f g@(GameState {..}) = g {pieceState=newPieceState}
   where
     newPieceState = case pieceState of
       Waiting n -> Waiting n
-      Falling piece n -> Falling (tryMove piece) n
-      Locking piece n -> Locking (tryMove piece) n
+      ClearingLines n -> ClearingLines n
+      Falling piece n -> tryMove piece n
+      Locking piece n -> tryMove piece n
     
-    moveResult = g {pieceState=newPieceState}
-    
-    tryMove::Piece->Piece
-    tryMove piece = if isValid then newPiece else piece
+    tryMove::Piece->Int->PieceState
+    tryMove piece n = newPieceState
       where
-        newPiece = f piece
-        isValid = checkPiece newPiece grid
-
-    checkFalling::GameState->GameState
-    checkFalling g@(GameState {..}) = g {pieceState=newPieceState}
-      where
-        newPieceState = case pieceState of
-          Falling p n | canFall p -> Falling p n
-                      | otherwise -> Locking p n
-          Locking p n | canFall p -> Falling p n
-                      | otherwise -> Locking p n
-          Waiting n -> Waiting n
-    
-    canFall::Piece->Bool
-    canFall piece = checkPiece newPiece grid
-      where
-        newPiece = moveCentre (0,-1) piece
-    
+        movedPiece = f piece
+        isValid = checkPiece movedPiece grid
+        newPiece = if isValid then movedPiece else piece
+        fallenPiece = moveCentre (0,-1) newPiece
+        canFall = checkPiece fallenPiece grid
+        newPieceState = if canFall then Falling newPiece n else Locking newPiece n
 
 rotate::(Rotation->Rotation)->Piece->Piece
 rotate f piece = Piece shape (f rotation) centre
@@ -137,8 +133,15 @@ moveLeft = move $ moveCentre (-1, 0)
 moveDown::GameState->GameState
 moveDown = move $ moveCentre (0, -1)
 
+fall::Int->GameState->GameState
+fall n = repeat n $ move $ moveCentre (0, -1)
+    where
+      repeat :: Int -> (a -> a) -> (a -> a)
+      repeat 0 _ = id
+      repeat n f = f . repeat (n - 1) f
+
 hardDrop::GameState->GameState
-hardDrop = move $ moveCentre (0, -1)
+hardDrop = fall 25
 
 turnRight::GameState->GameState
 turnRight = move $ rotate right
@@ -146,8 +149,8 @@ turnRight = move $ rotate right
 turnLeft::GameState->GameState
 turnLeft = move $ rotate left
 
-tickEvent::GameState -> Either () GameState
-tickEvent = Right . checkPieceTimer . advancePieceTimer
+onTickEvent::GameState -> GameState
+onTickEvent = checkPieceTimer . advancePieceTimer
 
 advancePieceTimer::GameState->GameState
 advancePieceTimer g@(GameState {..}) = g {pieceState=newPieceState}
@@ -156,21 +159,38 @@ advancePieceTimer g@(GameState {..}) = g {pieceState=newPieceState}
       Falling piece n -> Falling piece (n+1)
       Locking piece n -> Locking piece (n+1)
       Waiting n -> Waiting (n+1)
+      ClearingLines n -> ClearingLines (n+1)
 
 checkPieceTimer::GameState->GameState
 checkPieceTimer g@(GameState {..})
   = case pieceState of
-    Falling piece n | n >= fallDelay -> move (moveCentre (0,-1)) (g {pieceState = Falling piece 0})
+    Falling piece n | n >= fallDelay -> (fall fallAmount) (g {pieceState = Falling piece 0})
                     | otherwise -> g
-    Locking piece n | n >= lockDelay-> g {pieceState = Waiting 0, grid = putPiece piece grid}
+    Locking piece n | n >= lockDelay -> landPiece $ g {grid = putPiece piece grid}
                     | otherwise -> g
-    Waiting n       | n >= waitDelay -> nextPiece $ g
+    Waiting n       | n >= waitDelay -> nextPiece $ g 
+                    | otherwise -> g
+    ClearingLines n | n >= waitDelay -> nextPiece $ g {grid = clearLines grid}
                     | otherwise -> g
 
+clearLines::[[Block]]->[[Block]]
+clearLines grid = take height $ filter (not . isRowCleared) grid ++ repeat emptyRow
+
+isRowCleared::[Block]->Bool
+isRowCleared row = all hasBlock row
+  where
+    hasBlock::Block->Bool
+    hasBlock (Just _) = True
+    hasBlock Nothing = False
+
+landPiece::GameState->GameState
+landPiece g@(GameState {..}) = if any isRowCleared grid then g {pieceState = ClearingLines 0} else g {pieceState = Waiting 0}
+
 nextPiece::GameState->GameState
-nextPiece g@(GameState {..}) = g{shapes=newShapes, pieceState=Falling newPiece 0}
+nextPiece g@(GameState {..}) = g {shapes=newShapes, pieceState=newPieceState}
   where
     (s,newShapes) = case shapes of
       (x:xs) -> (x,xs)
       [] -> error "ran out of shapes"
     newPiece = Piece s North (5,22)
+    newPieceState = Falling newPiece 0

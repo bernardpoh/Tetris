@@ -10,15 +10,3 @@ width = 10
 
 tickRate :: Integer
 tickRate = 60
-
-appearanceDelay :: Int
-appearanceDelay = 30
-
-lineClearDelay :: Int
-lineClearDelay = 41
-
-dropInterval :: Int
-dropInterval = 50
-
-fallAmount :: Int
-fallAmount = 1
