@@ -35,13 +35,14 @@ keyPressedEvent::Char-> GameState-> Either () GameState
 keyPressedEvent 'z' g = Right $ turnRight g
 keyPressedEvent 'x' g = Right $ turnLeft g
 keyPressedEvent 'q' _ = Left ()
--- it turns out that when you press the left arrow button, it does not map to any specific character
--- instead it maps to the succession of characters ['\ESC', '[', 'D']
--- Also, it can detect capital letters and characters, which is affected by caps lock and shift
--- The caps lock and shift keys cannot be detected by themselves
--- Also, right click pastes whatever list of characters is in your clickboard
--- its very weird
--- For our program we will use 'D' to detect left and so on for all the other arrow keys
+{- it turns out that when you press the left arrow button, it does not map to any specific character
+instead it maps to the succession of characters ['\ESC', '[', 'D']
+Also, it can detect capital letters and characters, which is affected by caps lock and shift
+The caps lock and shift keys cannot be detected by themselves
+Also, right click pastes whatever list of characters is in your clickboard
+its very weird
+For our program we will use 'D' to detect left and so on for all the other arrow keys
+-}
 keyPressedEvent 'D' g = Right $ moveLeft g -- left arrow
 keyPressedEvent 'C' g = Right $ moveRight g -- right arrow
 keyPressedEvent 'A' g = Right $ turnRight g -- up arrow
