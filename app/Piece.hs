@@ -1,5 +1,5 @@
 
-module Piece where
+module Piece (Piece(..), Shape(..), Rotation(..), Block, Point, left, right, checkPiece, putPiece, emptyGrid, emptyRow, showBoard) where
 
 import Config (height, width)
 import Data.Maybe

@@ -1,4 +1,4 @@
-module Config where
+module Config (height, width, tickRate) where
 
 height::Int
 height = 24
